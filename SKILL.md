@@ -38,6 +38,7 @@ Write `SPEC.md` with these sections:
 - API base path, auth scheme, content type
 - Data models (all entities, fields, types, relationships)
 - Endpoints (method, path, request/response shapes)
+- Shared constants (status enums, error codes, feature flags)
 - Error format
 
 ## Routes
@@ -46,9 +47,14 @@ Backend Engineer implements these. Frontend Engineer consumes them.
 ## UI Components
 Frontend Engineer builds these. Backend Engineer doesn't touch them.
 
+## Shared Constants
+Both agents use these. Status enums, error codes, UI state labels.
+
 ## Success Criteria
 Observable behavior. Not "tests pass" — "user can log in and see calendar."
 ```
+
+For the full spec template with examples, see `references/spec-template.md`.
 
 ### Step 2: Orchestrator Spawns Agents
 
@@ -94,9 +100,64 @@ Set `mode: "run"` for one-shot completion.
 1. Read `integration.md` from both agents
 2. Inspect files in `backend/` and `frontend/`
 3. Verify API responses match UI expectations
-4. If mismatches found, send corrections to the responsible agent
+4. If mismatches found, follow the Recovery Protocol below
 5. Move code to production paths
 6. Archive the build directory (or delete it)
+
+## Recovery Protocol
+
+When something goes wrong during a parallel build, follow these steps:
+
+### Agent Crash or Timeout
+1. Check if the agent produced any files before crashing
+2. Read `integration.md` — did it log progress before failing?
+3. Re-spawn the agent with the *same* task + a note: "Previous run crashed. Continue from where you left off. Read integration.md for progress so far."
+4. If the agent crashes again on the same task, reduce scope — split the work into smaller pieces
+
+### Build Mismatch (API ≠ UI)
+1. Identify the specific mismatch (field names, response shape, auth flow)
+2. Determine which side is correct by re-reading `SPEC.md`
+3. Send a targeted correction to the *wrong* agent — not a full re-spawn, just: "Fix {specific thing}. The spec says {X} but your code does {Y}."
+4. If both sides deviated from spec, update `SPEC.md` with the correct contract, then correct both
+
+### Blocked Agent
+1. Read the blocker in `integration.md`
+2. If it's a dependency on the other agent's work (e.g., frontend needs an endpoint that backend hasn't built yet):
+   - Check if backend's route handler exists even partially
+   - If yes, tell frontend to mock the expected response shape from the spec
+   - If no, tell frontend to stub the API client and proceed with placeholder data
+3. If it's an external blocker (missing credentials, environment issue), alert the orchestrator's human
+
+### integration.md Conflict
+If both agents edit `integration.md` simultaneously and create a conflict:
+1. Read both versions
+2. Merge manually — keep both progress sections
+3. Write the merged version back
+4. Consider switching to a per-agent log format (see `references/integration-log.md`)
+
+## Verification Guide
+
+Before declaring the build complete, verify:
+
+### Backend Verification
+```bash
+# Test each endpoint from the spec
+curl -s http://localhost:8000/api/v1/{resource} | jq .
+curl -X POST http://localhost:8000/api/v1/{resource} -d '{...}' | jq .
+```
+
+### Frontend Verification
+- [ ] Loading state renders (spinner/skeleton)
+- [ ] Empty state renders (no data message)
+- [ ] Error state renders (actionable error message)
+- [ ] Populated state renders (data from API)
+- [ ] All user interactions work (click, submit, navigate)
+
+### Integration Verification
+- [ ] Frontend fetch calls match backend endpoint paths
+- [ ] Request/response shapes match the spec
+- [ ] Error responses display correctly in the UI
+- [ ] Auth flow works end-to-end
 
 ## Setup Script
 

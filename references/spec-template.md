@@ -22,9 +22,25 @@ One sentence. What this feature does and why it matters.
 |-------|------|----------|-------|
 | id | string | yes | UUID |
 | name | string | yes | Display name |
+| status | string | yes | See Shared Constants |
 
 ### {Entity Name 2}
 ...
+
+## Shared Constants
+
+Both backend and frontend must use the same values for these:
+
+### Status Enums
+| Constant | Values | Used By |
+|----------|--------|---------|
+| `{Entity}Status` | `active`, `inactive`, `pending` | Backend enum + frontend labels |
+| `ErrorCode` | `NOT_FOUND`, `UNAUTHORIZED`, `VALIDATION_ERROR` | Backend error responses + frontend error messages |
+
+### Feature Flags
+| Flag | Default | Description |
+|------|---------|-------------|
+| `ENABLE_{FEATURE}` | `false` | Controls {feature} visibility |
 
 ## Endpoints
 
@@ -46,6 +62,17 @@ One sentence. What this feature does and why it matters.
 }
 ```
 **Response:** `201 Created` with body containing the created entity
+
+### Error Response (all endpoints)
+```json
+{
+  "error": "VALIDATION_ERROR",
+  "detail": {
+    "field": "email",
+    "message": "Invalid email format"
+  }
+}
+```
 
 ## UI Components
 
@@ -81,10 +108,30 @@ frontend/
 - Loading state: What shows while data fetches?
 - Offline: Does it degrade gracefully?
 
+## Verification Checklist
+
+### Backend
+- [ ] Each endpoint returns correct status codes (200, 201, 400, 404, 500)
+- [ ] Error responses match the shared error format
+- [ ] Status enums match the Shared Constants section
+- [ ] Auth scheme matches the Contract section
+
+### Frontend
+- [ ] Loading state renders (spinner/skeleton)
+- [ ] Empty state renders (no data message)
+- [ ] Error state renders (actionable error message)
+- [ ] Populated state renders with real data
+- [ ] All user interactions work (click, submit, navigate)
+
+### Integration
+- [ ] Frontend fetch calls match backend endpoint paths
+- [ ] Request/response shapes match the spec
+- [ ] Shared constants are consistent between frontend and backend
+- [ ] Auth flow works end-to-end
+
 ## Success Criteria
 
-- [ ] Endpoint returns correct data with proper status codes
-- [ ] UI renders loading, empty, error, and populated states
+- [ ] Observable behavior that proves it works (not "tests pass")
 - [ ] User can complete the full happy path end-to-end
 - [ ] API errors display actionable messages in the UI
 

@@ -18,9 +18,12 @@ Use this template when spawning or messaging agents. Include ALL fields.
 **ETA:** {YYYY-MM-DD HH:MM UTC}
 ```
 
-## After Handoff
+## Monitoring
 
-1. Verify agent acknowledges within 5 minutes
-2. Check T+30min: Did they start? Files modified?
-3. Check T+2hr: Progress? Blockers?
-4. If no progress by ETA: mark STALE, alert orchestrator
+Adapt monitoring to your setup. Suggested pattern:
+
+1. Check shortly after handoff: Did the agent start? Files modified?
+2. Check near ETA: Progress? Blockers?
+3. If no progress by ETA: re-spawn or escalate
+
+Adjust frequency and method based on your agent architecture and tooling.

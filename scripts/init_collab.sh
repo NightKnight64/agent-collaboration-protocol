@@ -43,6 +43,13 @@ One sentence. What this feature does and why it matters.
 | Content Type | `application/json` |
 | Error Format | `{ "error": "...", "detail": { ... } }` |
 
+## Shared Constants
+
+### Status Enums
+| Constant | Values | Used By |
+|----------|--------|---------|
+| `{Entity}Status` | `active`, `inactive`, `pending` | Backend enum + frontend labels |
+
 ## Endpoints
 
 ### `GET /api/v1/{resource}`

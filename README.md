@@ -1,74 +1,49 @@
 # Agent Collaboration Protocol
 
-> Structured multi-agent collaboration for backend + frontend builds.
+Structured multi-agent collaboration for backend + frontend builds.
 
-When your orchestrator needs to coordinate a backend engineer and a frontend engineer on the same feature, this protocol prevents merge-hell before it starts. Three roles. One contract. One shared workspace.
+## Overview
 
-## Quick Start
-
-```bash
-clawhub install agent-collaboration-protocol
-```
-
-Then, in your project:
-
-```bash
-./init_collab.sh /path/to/your/project
-```
-
-See [SKILL.md](SKILL.md) for full protocol instructions.
-
-## How It Works
+Three roles collaborate through a shared workspace:
 
 | Role | Responsibility |
 |------|---------------|
-| **Orchestrator** | Defines API contract, spawns agents, verifies integration |
-| **Backend Engineer** | Implements API spec, writes to `shared/build-{date}/backend/` |
-| **Frontend Engineer** | Implements UI from spec, writes to `shared/build-{date}/frontend/` |
+| **Orchestrator** | Defines the contract, spawns both builders, verifies integration, merges |
+| **Backend Engineer** | Writes API code, data models, infrastructure |
+| **Frontend Engineer** | Writes UI components, templates, styles |
 
-Both agents build simultaneously from the same contract (`SPEC.md`), tracking progress in `integration.md`. The orchestrator inspects, sends corrections if needed, and merges.
+The contract lives in `shared/build-{YYYYMMDD}/`. Both builders write to the same directory. The orchestrator inspects and merges when both are done.
 
-## Contents
+## Quick Start
 
-```
-agent-collaboration-protocol/
-├── SKILL.md                 ← Full protocol — what to say to each agent
-├── clawhub.json             ← Skill manifest
-├── scripts/
-│   └── init_collab.sh       ← One-command workspace setup
-└── references/
-    ├── spec-template.md     ← API contract template
-    ├── integration-log.md   ← Progress tracking template
-    └── handoff-format.md    ← Task handoff message format
-```
+1. Run `scripts/init_collab.sh /path/to/project` to create the shared workspace
+2. Edit `shared/SPEC.md` with your feature contract
+3. Spawn backend and frontend agents (see SKILL.md for task templates)
+4. Both agents build simultaneously, updating `integration.md`
+5. Orchestrator verifies and merges
 
-## Use Cases
+## What's New in v1.1.0
 
-- Building a new API + dashboard from scratch
-- Adding a feature requiring backend changes + new UI
-- Refactoring a monolith into API + frontend layers
-- Any task where two agents need to stay in sync across boundaries
+- **Recovery Protocol** — Concrete steps for agent crashes, build mismatches, and blockers
+- **Shared Constants** — Status enums, error codes, and feature flags that both sides must agree on
+- **Verification Guide** — Backend curl commands, frontend state checklist, integration checks
+- **Per-Agent Log Format** — Solves simultaneous-write conflicts in integration.md
+- **MIT-0 License** — Simplest possible open source license
 
-## Installation
+## Documentation
 
-### Via ClawHub (recommended)
+- `SKILL.md` — Full workflow, recovery protocol, and verification guide
+- `references/spec-template.md` — Complete SPEC.md template with examples
+- `references/integration-log.md` — Integration log format (standard + per-agent)
+- `references/handoff-format.md` — Task handoff message template
 
-```bash
-clawhub install agent-collaboration-protocol
-```
+## When Not to Use
 
-### Via GitHub
-
-```bash
-git clone https://github.com/NightKnight64/agent-collaboration-protocol.git
-```
-
-## Requirements
-
-- An agent platform with subagent spawning (OpenClaw, Claude Code, Cursor, etc.)
-- Access to at least one backend-capable and one frontend-capable model
-- Bash (for the setup script)
+- Single-file changes (just do it directly)
+- Solo tasks that don't cross backend/frontend boundaries
+- Bug fixes that are purely backend or purely frontend
+- Tasks where one agent can handle both sides (use a single subagent instead)
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT-0 — do whatever you want, no attribution required.
