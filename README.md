@@ -22,7 +22,13 @@ The contract lives in `shared/build-{YYYYMMDD}/`. Both builders write to the sam
 4. Both agents build simultaneously, updating `integration.md`
 5. Orchestrator verifies and merges
 
-## What's New in v1.1.0
+## What's New in v1.2.0
+
+- **Absolute path requirement** — Orchestrator must provide full absolute paths to subagents. Isolated sessions don't resolve relative paths reliably.
+- **Artifact verification step** — "Check that files actually landed" is now Step 4 item 1 and Recovery Protocol item 1. Don't trust completion messages alone.
+- **{ABSOLUTE_BUILD_DIR} convention** — All handoff templates now use this placeholder instead of `shared/build-{YYYYMMDD}/`.
+
+### v1.1.0
 
 - **Recovery Protocol** — Concrete steps for agent crashes, build mismatches, and blockers
 - **Shared Constants** — Status enums, error codes, and feature flags that both sides must agree on

@@ -15,7 +15,7 @@ Three roles collaborate through a shared workspace:
 | **Backend Engineer** | Writes API code, data models, infrastructure |
 | **Frontend Engineer** | Writes UI components, templates, styles |
 
-The contract lives in a `shared/build-{YYYYMMDD}/` directory on the filesystem. **The orchestrator MUST provide the full absolute path** (e.g. `/home/user/project/shared/build-{YYYYMMDD}/`) in all handoff messages — isolated subagent sessions do not resolve relative paths reliably. Both builders write to the same directory. The orchestrator inspects and merges when both are done.
+The contract lives in `shared/build-{YYYYMMDD}/`. Both builders write to the same directory. The orchestrator inspects and merges when both are done.
 
 ## Workflow
 
@@ -63,21 +63,19 @@ Spawn two subagents with `sessions_spawn`:
 **Backend Engineer:**
 ```
 task: >
-  Implement the API spec at {ABSOLUTE_BUILD_DIR}/SPEC.md.
-  Write all backend code to {ABSOLUTE_BUILD_DIR}/backend/.
-  Update {ABSOLUTE_BUILD_DIR}/integration.md with progress.
-  IMPORTANT: Use the full absolute path for ALL file writes. Verify files exist after writing.
+  Implement the API spec in shared/build-{YYYYMMDD}/SPEC.md.
+  Write all backend code to shared/build-{YYYYMMDD}/backend/.
+  Update shared/build-{YYYYMMDD}/integration.md with progress.
   Use {backend framework} (FastAPI, Express, etc.).
 ```
 
 **Frontend Engineer:**
 ```
 task: >
-  Implement the UI for the spec at {ABSOLUTE_BUILD_DIR}/SPEC.md.
-  Write all frontend code to {ABSOLUTE_BUILD_DIR}/frontend/.
+  Implement the UI for the spec in shared/build-{YYYYMMDD}/SPEC.md.
+  Write all frontend code to shared/build-{YYYYMMDD}/frontend/.
   Use the API contract in SPEC.md for your fetch calls.
-  Update {ABSOLUTE_BUILD_DIR}/integration.md with progress.
-  IMPORTANT: Use the full absolute path for ALL file writes. Verify files exist after writing.
+  Update shared/build-{YYYYMMDD}/integration.md with progress.
   Use {frontend stack} (HTMX+Tailwind, React, etc.).
 ```
 
@@ -85,38 +83,36 @@ Set `mode: "run"` for one-shot completion.
 
 ### Step 3: Both Build Simultaneously
 
-**Backend Engineer writes to** `{ABSOLUTE_BUILD_DIR}/backend/`:
+**Backend Engineer writes to** `shared/build-{YYYYMMDD}/backend/`:
 - Router/handler code
 - Data models and schemas
 - Config and infrastructure files
-- Updates `{ABSOLUTE_BUILD_DIR}/integration.md` with progress and any blockers
+- Updates `integration.md` with progress and any blockers
 
-**Frontend Engineer writes to** `{ABSOLUTE_BUILD_DIR}/frontend/`:
+**Frontend Engineer writes to** `shared/build-{YYYYMMDD}/frontend/`:
 - UI components / templates
 - Styles and layout
 - API client code
-- Updates `{ABSOLUTE_BUILD_DIR}/integration.md` with progress and any blockers
+- Updates `integration.md` with progress and any blockers
 
 ### Step 4: Orchestrator Verifies and Merges
 
-1. **Check that artifacts actually landed** — run `ls` on both `{ABSOLUTE_BUILD_DIR}/backend/` and `{ABSOLUTE_BUILD_DIR}/frontend/`. Do not trust completion messages alone.
-2. Read `integration.md` from both agents
-3. Inspect files in `backend/` and `frontend/`
-4. Verify API responses match UI expectations
-5. If mismatches found, follow the Recovery Protocol below
-6. Move code to production paths
-7. Archive the build directory (or delete it)
+1. Read `integration.md` from both agents
+2. Inspect files in `backend/` and `frontend/`
+3. Verify API responses match UI expectations
+4. If mismatches found, follow the Recovery Protocol below
+5. Move code to production paths
+6. Archive the build directory (or delete it)
 
 ## Recovery Protocol
 
 When something goes wrong during a parallel build, follow these steps:
 
 ### Agent Crash or Timeout
-1. **Verify artifacts first** — `ls {ABSOLUTE_BUILD_DIR}/backend/` or `{ABSOLUTE_BUILD_DIR}/frontend/`. A "completed successfully" status does not guarantee files were written to the expected path.
-2. Check if the agent produced any files before crashing
-3. Read `integration.md` — did it log progress before failing?
-4. Re-spawn the agent with the *same* task + a note: "Previous run crashed. Continue from where you left off. Read integration.md for progress so far."
-5. If the agent crashes again on the same task, reduce scope — split the work into smaller pieces
+1. Check if the agent produced any files before crashing
+2. Read `integration.md` — did it log progress before failing?
+3. Re-spawn the agent with the *same* task + a note: "Previous run crashed. Continue from where you left off. Read integration.md for progress so far."
+4. If the agent crashes again on the same task, reduce scope — split the work into smaller pieces
 
 ### Build Mismatch (API ≠ UI)
 1. Identify the specific mismatch (field names, response shape, auth flow)
