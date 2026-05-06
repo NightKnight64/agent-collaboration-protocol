@@ -1,63 +1,89 @@
-# Integration Log — `shared/build-{YYYYMMDD}/integration.md`
+# Integration Logs — `shared/build-{YYYYMMDD}/`
 
-## Format
+## Per-Agent Log Files (default — avoids conflicts)
 
-```markdown
-# Build: {Feature Name} — {Date}
+Each agent writes to its own log file. **No simultaneous-write conflicts possible.**
 
-## Status
-Orchestrator: ⏳ Waiting / 🔍 Reviewing / ✅ Complete
-Backend: 🔨 Building / ✅ Done / ❌ Blocked
-Frontend: 🔨 Building / ✅ Done / ❌ Blocked
-
-## Backend Progress
-- [ ] Router implemented at `backend/router.py`
-- [ ] Models defined at `backend/models.py`
-- [ ] Endpoints responding correctly
-- [ ] Shared constants match spec
-
-### Blockers
-- ...
-
-## Frontend Progress
-- [ ] Components built in `frontend/components/`
-- [ ] API client wired to endpoints
-- [ ] All states handled (loading, empty, error, populated)
-- [ ] Shared constants match spec
-
-### Blockers
-- ...
-
-## Integration Notes
-- Data format mismatch found: endpoint returns `items`, UI expects `data`
-- Auth tokens not flowing through — need session cookie handling
+```
+shared/build-{YYYYMMDD}/
+  backend-log.md    ← Backend Engineer writes here
+  frontend-log.md   ← Frontend Engineer writes here
+  integration.md    ← Orchestrator merges findings here
 ```
 
-## Per-Agent Log Format (avoids conflicts)
-
-When both agents write to `integration.md` simultaneously, use separate log sections:
+### backend-log.md Format
 
 ```markdown
-# Build: {Feature Name} — {Date}
+# Backend Build Log — {Feature Name}
+
+Started: YYYY-MM-DD HH:MM UTC
+
+## Progress
+- HH:MM — Task started
+- HH:MM — Router scaffolded at `backend/router.py`
+- HH:MM — Models defined at `backend/models.py`
+- HH:MM — Endpoint `GET /api/v1/{resource}` responding with mock data
+- HH:MM — Shared constants file created
+- HH:MM — All endpoints complete, ready for integration testing
+
+## Blockers
+- HH:MM — BLOCKER: Need {dependency}. Resolution: {approach or "waiting on orchestrator"}
+
+## Notes
+- Any observations about the spec or approach
+```
+
+### frontend-log.md Format
+
+```markdown
+# Frontend Build Log — {Feature Name}
+
+Started: YYYY-MM-DD HH:MM UTC
+
+## Progress
+- HH:MM — Task started
+- HH:MM — Component scaffolds created in `frontend/components/`
+- HH:MM — API client wired to endpoints from SPEC.md
+- HH:MM — Loading/empty/error states handled
+- HH:MM — All components complete, ready for integration testing
+
+## Blockers
+- HH:MM — BLOCKER: Waiting for backend endpoint `POST /api/v1/{resource}`. Using mock data in meantime.
+
+## Notes
+- Any observations about the spec or approach
+```
+
+### integration.md (Orchestrator's Merge)
+
+```markdown
+# Integration Report — {Feature Name}
 
 ## Status
-Orchestrator: ⏳ Waiting
-Backend: 🔨 Building
-Frontend: 🔨 Building
+Backend: ✅ Done / ❌ Blocked / ⚠️ Partial
+Frontend: ✅ Done / ❌ Blocked / ⚠️ Partial
 
-## Backend Log
-<!-- Only the backend agent edits this section -->
-- 2024-01-15 10:00: Started router implementation
-- 2024-01-15 10:30: GET /api/v1/items endpoint complete
-- 2024-01-15 11:00: BLOCKER: Need auth middleware from infra team
+## Backend Summary
+(from backend-log.md)
 
-## Frontend Log
-<!-- Only the frontend agent edits this section -->
-- 2024-01-15 10:15: Started ItemList component
-- 2024-01-15 10:45: Mock data wired, awaiting backend endpoint
-- 2024-01-15 11:10: Switched to using spec contract for API client
+## Frontend Summary
+(from frontend-log.md)
 
-## Integration Issues
-<!-- Orchestrator edits this section -->
-- (none yet)
+## Integration Issues Found
+- Issue: {description} — Resolution: {how fixed or "pending"}
+- Issue: {description} — Resolution: {how fixed or "pending"}
+
+## Verification
+- [ ] Backend endpoints respond per spec
+- [ ] Frontend renders all states correctly
+- [ ] API shapes match between frontend and backend
+- [ ] Auth flow works end-to-end
+- [ ] Shared constants are consistent
+
+## Decision
+✅ Merge to production / ❌ Re-spawn {which} agent / ⚠️ Manual intervention needed
 ```
+
+## Deprecated: Single-File Format
+
+The previous approach used a single `integration.md` for all agents. This caused race conditions when both agents wrote simultaneously. **Do not use.** Migrate existing builds by splitting into backend-log.md and frontend-log.md.

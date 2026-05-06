@@ -1,30 +1,109 @@
 #!/usr/bin/env bash
 # init_collab.sh — Initialize collaboration workspace structure
-# Usage: ./init_collab.sh /path/to/project
+# Usage: ./init_collab.sh /path/to/project [--framework fastapi|express|django] [--dry-run]
 
 set -euo pipefail
 
-PROJECT_DIR="${1:-}"
+# --- Parse arguments ---
+PROJECT_DIR=""
+FRAMEWORK=""
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --framework)
+      FRAMEWORK="$2"
+      shift 2
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      echo "Usage: $0 /path/to/project [--framework fastapi|express] [--dry-run]"
+      exit 1
+      ;;
+    *)
+      PROJECT_DIR="$1"
+      shift
+      ;;
+  esac
+done
+
 if [ -z "$PROJECT_DIR" ]; then
-  echo "Usage: $0 /path/to/project"
+  echo "Usage: $0 /path/to/project [--framework fastapi|express] [--dry-run]"
   exit 1
+fi
+
+if $DRY_RUN; then
+  echo "=== DRY RUN — no files will be written ==="
+  echo "Project:  $PROJECT_DIR"
+  echo "Framework: ${FRAMEWORK:-none}"
+  echo ""
+fi
+
+# --- Validate OpenClaw version ---
+check_openclaw() {
+  if command -v openclaw &>/dev/null; then
+    local ver
+    ver=$(openclaw --version 2>/dev/null | grep -oP 'v?\K[0-9]+\.[0-9]+' | head -1)
+    if [ -n "$ver" ]; then
+      local major minor
+      major=$(echo "$ver" | cut -d. -f1)
+      minor=$(echo "$ver" | cut -d. -f2)
+      if [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -ge 0 ]; }; then
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+if $DRY_RUN; then
+  echo "[CHECK] OpenClaw v1.0+: skipped (dry run)"
+else
+  if check_openclaw; then
+    echo "[OK] OpenClaw v1.0+ detected — sessions_spawn is available"
+  else
+    echo "[WARN] Could not confirm OpenClaw v1.0+. sessions_spawn may not be available."
+    echo "       Install from https://docs.openclaw.ai to use this protocol."
+  fi
 fi
 
 SHARED_DIR="$PROJECT_DIR/shared"
 
-mkdir -p "$SHARED_DIR"
+# --- Create .gitignore ---
+create_gitignore() {
+  if [ -f "$PROJECT_DIR/.gitignore" ]; then
+    if grep -q "shared/build-" "$PROJECT_DIR/.gitignore" 2>/dev/null; then
+      echo "[SKIP] .gitignore already has build directory exclusion"
+      return
+    fi
+  fi
+  if $DRY_RUN; then
+    echo "[DRY] Would update .gitignore with build directory exclusion"
+    return
+  fi
+  cat >> "$PROJECT_DIR/.gitignore" << 'GITIGNORE'
 
-# Create .gitignore to keep build artifacts out
-if [ ! -f "$PROJECT_DIR/.gitignore" ]; then
-  cat > "$PROJECT_DIR/.gitignore" << 'GITIGNORE'
 # Agent Collaboration Protocol
 shared/build-*/
 GITIGNORE
-  echo "[OK] Created .gitignore with build directory exclusion"
-fi
+  echo "[OK] .gitignore updated"
+}
 
-# Create template SPEC.md
-if [ ! -f "$SHARED_DIR/SPEC.md" ]; then
+# --- Create SPEC.md ---
+create_spec() {
+  if [ -f "$SHARED_DIR/SPEC.md" ] && ! $DRY_RUN; then
+    echo "[SKIP] shared/SPEC.md already exists"
+    return
+  fi
+  if $DRY_RUN; then
+    echo "[DRY] Would create shared/SPEC.md"
+    return
+  fi
+  mkdir -p "$SHARED_DIR"
   cat > "$SHARED_DIR/SPEC.md" << 'SPEC'
 # SPEC: {Feature Name}
 
@@ -63,12 +142,132 @@ One sentence. What this feature does and why it matters.
 - [ ] Observable behavior that proves it works
 SPEC
   echo "[OK] Created shared/SPEC.md template"
-fi
+}
+
+# --- Create log file templates ---
+create_log_templates() {
+  if $DRY_RUN; then
+    echo "[DRY] Would create log file templates (backend-log.md, frontend-log.md)"
+    return
+  fi
+  mkdir -p "$SHARED_DIR"
+
+  cat > "$SHARED_DIR/backend-log.md" << 'LOG'
+# Backend Build Log — {Feature Name}
+
+Started: {date}
+
+## Progress
+
+## Blockers
+
+## Notes
+LOG
+
+  cat > "$SHARED_DIR/frontend-log.md" << 'LOG'
+# Frontend Build Log — {Feature Name}
+
+Started: {date}
+
+## Progress
+
+## Blockers
+
+## Notes
+LOG
+
+  echo "[OK] Created log file templates"
+}
+
+# --- Framework-specific stubs ---
+create_framework_stubs() {
+  if [ -z "$FRAMEWORK" ]; then
+    return
+  fi
+  if $DRY_RUN; then
+    echo "[DRY] Would create framework stubs for: $FRAMEWORK"
+    return
+  fi
+
+  local stub_dir="$SHARED_DIR/build-latest"
+  mkdir -p "$stub_dir/backend" "$stub_dir/frontend"
+
+  case "$FRAMEWORK" in
+    fastapi)
+      cat > "$stub_dir/backend/main.py" << 'PYTHON'
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="{Feature Name}", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/api/v1/health")
+async def health():
+    return {"status": "ok"}
+PYTHON
+      cat > "$stub_dir/backend/requirements.txt" << 'REQS'
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+REQS
+      echo "[OK] Created FastAPI backend skeleton"
+      ;;
+    express)
+      cat > "$stub_dir/backend/index.js" << 'JS'
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.use(express.json());
+
+app.get('/api/v1/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
+JS
+      cat > "$stub_dir/backend/package.json" << 'JSON'
+{
+  "name": "{feature-name}",
+  "version": "0.1.0",
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}
+JSON
+      echo "[OK] Created Express backend skeleton"
+      ;;
+    django)
+      echo "[OK] Django detected — create 'django-admin startproject' separately, then"
+      echo "     write API code to shared/build-{YYYYMMDD}/backend/"
+      ;;
+    *)
+      echo "[WARN] Unknown framework: $FRAMEWORK. Skipping stubs."
+      echo "       Supported: fastapi, express, django"
+      ;;
+  esac
+}
+
+# --- Run ---
+create_gitignore
+create_spec
+create_log_templates
+create_framework_stubs
 
 echo ""
 echo "=== Collaboration workspace initialized ==="
-echo "  Project: $PROJECT_DIR"
-echo "  Shared:  $SHARED_DIR"
+echo "  Project:   $PROJECT_DIR"
+echo "  Shared:    $SHARED_DIR"
+echo "  Framework: ${FRAMEWORK:-none}"
 echo ""
 echo "Next: Edit shared/SPEC.md with your feature contract,"
 echo "then spawn backend and frontend agents."
