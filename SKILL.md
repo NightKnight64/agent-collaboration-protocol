@@ -89,6 +89,8 @@ Set `mode: "run"` for one-shot completion.
 
 **Handoff acknowledgment is mandatory.** Each agent must confirm receipt and verify the build directory path exists before beginning work. If an agent does not ACK within a reasonable window (< 2 minutes), re-spawn it. See `references/handoff-format.md` for the full handoff template.
 
+> **Important: Identity comes from context, not the label.** The `label` parameter passed to `sessions_spawn` is a runtime tag for orchestrator tracking — it does NOT determine the agent's role. The subagent's role (Backend Engineer vs Frontend Engineer) is determined entirely by the orchestrator's context injection: the `task` message you provide tells the subagent what role to play, what files to write, and what contract to follow. Two subagents spawned with the same `label` can have completely different tasks and roles.
+
 ### Step 3: Both Build Simultaneously
 
 **Backend Engineer writes to** `{ABSOLUTE_BUILD_DIR}/backend/`:
@@ -107,25 +109,23 @@ Each agent has its own log file — **no simultaneous-write conflicts possible.*
 
 ### Step 4: Orchestrator Verifies and Merges
 
-1. **Check that artifacts actually landed** — run `ls` on both `{ABSOLUTE_BUILD_DIR}/backend/` and `{ABSOLUTE_BUILD_DIR}/frontend/`. Do not trust completion messages alone.
-2. Read `backend-log.md` and `frontend-log.md`
+1. Read both `backend-log.md` and `frontend-log.md` for progress
+2. Read `integration.md` for orchestrator notes
 3. Inspect files in `backend/` and `frontend/`
-4. Verify API responses match UI expectations
-5. If mismatches found, follow the Recovery Protocol below
-6. Merge findings into `integration.md`
-7. Move code to production paths
-8. Archive the build directory (or delete it)
+3. Verify API responses match UI expectations
+4. If mismatches found, follow the Recovery Protocol below
+5. Move code to production paths
+6. Archive the build directory (or delete it)
 
 ## Recovery Protocol
 
 When something goes wrong during a parallel build, follow these steps:
 
 ### Agent Crash or Timeout
-1. **Verify artifacts first** — `ls {ABSOLUTE_BUILD_DIR}/backend/` or `{ABSOLUTE_BUILD_DIR}/frontend/`. A "completed successfully" status does not guarantee files were written to the expected path.
-2. Check if the agent produced any files before crashing
-3. Read the agent's log file — did it log progress before failing?
-4. Re-spawn the agent with the *same* task + a note: "Previous run crashed. Continue from where you left off. Read your log file for progress so far."
-5. If the agent crashes again on the same task, reduce scope — split the work into smaller pieces
+1. Check if the agent produced any files before crashing
+2. Read `integration.md` — did it log progress before failing?
+3. Re-spawn the agent with the *same* task + a note: "Previous run crashed. Continue from where you left off. Read integration.md for progress so far."
+4. If the agent crashes again on the same task, reduce scope — split the work into smaller pieces
 
 ### Build Mismatch (API ≠ UI)
 1. Identify the specific mismatch (field names, response shape, auth flow)
@@ -134,26 +134,19 @@ When something goes wrong during a parallel build, follow these steps:
 4. If both sides deviated from spec, update `SPEC.md` with the correct contract, then correct both
 
 ### Blocked Agent
-1. Read the blocker in the agent's log file
+1. Read the blocker in `integration.md`
 2. If it's a dependency on the other agent's work (e.g., frontend needs an endpoint that backend hasn't built yet):
    - Check if backend's route handler exists even partially
    - If yes, tell frontend to mock the expected response shape from the spec
    - If no, tell frontend to stub the API client and proceed with placeholder data
 3. If it's an external blocker (missing credentials, environment issue), alert the orchestrator's human
 
-### When to Abort
-
-Recognize the sunk-cost trap. Stop and re-scope when:
-
-| Trigger | Action |
-|---------|--------|
-| Same agent crashes **3 times** on the same task | Re-scope: split task into smaller sub-tasks and run sequentially |
-| No files produced after **2 attempts** | The task is too ambiguous. Rewrite the handoff with more concrete deliverables |
-| Either agent has been running **>15 minutes** without producing a log entry | The agent is likely stuck. Kill the session, check its outputs, re-scope |
-| Integration mismatch requires **>2 rounds** of corrections | The spec is wrong. Stop both agents, update `SPEC.md`, restart |
-| Agent produces code that doesn't match the spec **after explicit correction** | Model capability gap. Switch to a stronger model for that role or simplify the task |
-
-**The override rule:** If you've spent more time debugging the collaboration than it would take to do the work yourself, abort and do it sequentially.
+### integration.md Conflict
+If both agents edit `integration.md` simultaneously and create a conflict:
+1. Read both versions
+2. Merge manually — keep both progress sections
+3. Write the merged version back
+4. Consider switching to a per-agent log format (see `references/integration-log.md`)
 
 ## Verification Guide
 
@@ -184,21 +177,17 @@ curl -X POST http://localhost:8000/api/v1/{resource} -d '{...}' | jq .
 Run once per project to initialize the collaboration structure:
 
 ```
-scripts/init_collab.sh /path/to/project [--framework fastapi|express|django] [--dry-run]
+scripts/init_collab.sh /path/to/project
 ```
 
-Options:
-- `--framework` — pre-populate backend skeleton with framework-specific stubs
-- `--dry-run` — show what will be created without writing files
-
-Creates `shared/` with template `SPEC.md`, log file structure, and `.gitignore`.
+Creates `shared/` with template `SPEC.md` and `.gitignore`.
 
 ## Reference Files
 
 For deeper patterns and templates:
 - `references/spec-template.md` — Full SPEC.md template with examples
-- `references/integration-log.md` — Log file format for backend-log.md and frontend-log.md
-- `references/handoff-format.md` — Task handoff message template (includes ACK requirement)
+- `references/integration-log.md` — integration.md status format
+- `references/handoff-format.md` — Task handoff message template
 
 ## When Not to Use
 
