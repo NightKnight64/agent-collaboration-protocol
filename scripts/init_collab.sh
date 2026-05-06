@@ -75,6 +75,7 @@ SHARED_DIR="$PROJECT_DIR/shared"
 
 # --- Create .gitignore ---
 create_gitignore() {
+  $DRY_RUN || mkdir -p "$PROJECT_DIR"  # ensure parent exists
   if [ -f "$PROJECT_DIR/.gitignore" ]; then
     if grep -q "shared/build-" "$PROJECT_DIR/.gitignore" 2>/dev/null; then
       echo "[SKIP] .gitignore already has build directory exclusion"
