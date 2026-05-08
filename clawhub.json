@@ -1,7 +1,7 @@
 {
   "name": "agent-collaboration-protocol",
   "displayName": "Agent Collaboration Protocol",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Structured multi-agent collaboration for backend + frontend builds. Orchestrator, Backend Engineer, and Frontend Engineer roles work from a shared contract-first workspace with build directories, status tracking, recovery protocols, and integration verification.",
   "author": "the-hoffmann-board",
   "license": "MIT-0",

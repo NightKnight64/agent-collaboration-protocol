@@ -120,16 +120,37 @@ Each agent has its own log file — **no simultaneous-write conflicts possible.*
 
 The build is not done until the server reads from the new build. Follow these steps **in order**:
 
-**5a. Atomic symlink swap**
+**5a. Determine: full build or incremental?**
+
+| Build Type | What it means | Action |
+|------------|--------------|--------|
+| **Full build** | The build directory contains ALL project files (new + existing) | Symlink swap directly (5b) |
+| **Incremental build** | The build directory contains ONLY new/changed files | Merge first, then swap (5b) |
+
+Most collaborative builds are **incremental** — the backend and frontend agents only write the files they changed. An incremental build will break the site if you swap without merging, because `ln -snf` replaces the entire tree.
+
+**5b. Merge incremental builds (skip if full build)**
+
 ```bash
-# Atomically point `current` at the verified build
+# Sync new files INTO the existing tree (preserves all existing files)
+# Replace {YYYYMMDD} with the new build date
+rsync -av ~/.openclaw/shared/build-{YYYYMMDD}/backend/ \
+           ~/.openclaw/shared/build-{YYYYMMDD}/frontend/ \
+           $(readlink ~/.openclaw/shared/current)/
+```
+
+This copies new backend + frontend files into the current build tree. Existing files are only overwritten if they changed. **Verify nothing was lost:**
+```bash
+# Quick sanity: key endpoints still respond
+curl -s -o /dev/null -w "%{http_code}" https://hoffdesk.com/rtsport/parent
+```
+
+**5c. Atomic symlink swap (full builds, or post-merge)**
+```bash
 ln -snf ~/.openclaw/shared/build-{YYYYMMDD}/ ~/.openclaw/shared/current
 ```
 
-This is the heartbeat. `shared/current/` always points to the active build.
-The old date-stamped directory is preserved as a rollback point.
-
-**5b. Update server config to use `current`**
+**5d. Update server config to use `current`**
 
 Any server config that uses absolute paths to the build directory **must** point to `shared/current/`, never to a date-stamped directory.
 
@@ -144,12 +165,12 @@ RTS_BASE = Path("/home/hoffmann_admin/.openclaw/shared/build-20260501/frontend")
 
 This is a **one-time config change**. Set it once, then the symlink swap handles every future deploy.
 
-**5c. Restart the service**
+**5e. Restart the service**
 ```bash
 sudo systemctl restart hoffdesk-api
 ```
 
-**5d. Create intuitive workspace symlinks (once per project)**
+**5f. Create intuitive workspace symlinks (once per project)**
 ```bash
 # So that ~/{project}/ is always the live path
 ln -snf ~/.openclaw/shared/current/ ~/rtsport
@@ -157,7 +178,7 @@ ln -snf ~/.openclaw/shared/current/ ~/rtsport
 
 After this, any edit to `~/rtsport/frontend/templates/parent/dashboard.html` is a direct write to the live build. No indirection. No "which copy am I editing" questions.
 
-**5e. Verify deploy**
+**5g. Verify deploy**
 ```bash
 # Confirm `current` points to the new build
 ls -la ~/.openclaw/shared/current
@@ -249,6 +270,10 @@ Every deployed project follows a three-tier filesystem pattern:
 3. **`~/<project>/` is the intuitive path.** All human-facing workspaces are symlinks to `shared/current/`. When you edit `~/rtsport/frontend/...`, you are writing to the live build. No indirection.
 
 4. **This pattern applies ONLY to projects deployed via `shared/build-*/`.** Server code edited directly in agent workspaces (e.g., `workspace-socrates/hoffdesk-api/`) does not use the `shared/current/` symlink — those directories ARE the live paths already.
+
+5. **⚠️ Symlink swap replaces the entire tree.** `ln -snf` does not merge — it atomically points `current` at a new destination. If the new build only contains the files that changed (incremental build), the server will lose access to all other files. Always run the rsync merge step (Step 5b) for incremental builds before swapping the symlink.
+
+**Common pitfall:** You add a login page to `build-20260508/` and swap `current` to it. The login page works, but every other page (parent dashboard, coach dashboard, etc.) returns 404 because the new build directory doesn't contain them. This is the #1 deploy-time failure mode.
 
 **Rollback procedure:**
 
