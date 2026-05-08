@@ -112,10 +112,58 @@ Each agent has its own log file — **no simultaneous-write conflicts possible.*
 1. Read both `backend-log.md` and `frontend-log.md` for progress
 2. Read `integration.md` for orchestrator notes
 3. Inspect files in `backend/` and `frontend/`
-3. Verify API responses match UI expectations
-4. If mismatches found, follow the Recovery Protocol below
-5. Move code to production paths
-6. Archive the build directory (or delete it)
+4. Verify API responses match UI expectations
+5. If mismatches found, follow the Recovery Protocol below
+6. Verify against the [Verification Guide](#verification-guide)
+
+### Step 5: Deploy & Activate (Atomic Current Pivot)
+
+The build is not done until the server reads from the new build. Follow these steps **in order**:
+
+**5a. Atomic symlink swap**
+```bash
+# Atomically point `current` at the verified build
+ln -snf ~/.openclaw/shared/build-{YYYYMMDD}/ ~/.openclaw/shared/current
+```
+
+This is the heartbeat. `shared/current/` always points to the active build.
+The old date-stamped directory is preserved as a rollback point.
+
+**5b. Update server config to use `current`**
+
+Any server config that uses absolute paths to the build directory **must** point to `shared/current/`, never to a date-stamped directory.
+
+Example — `rtsport_mock.py`:
+```python
+# ✅ Correct — never needs updating after initial setup
+RTS_BASE = Path("/home/hoffmann_admin/.openclaw/shared/current/frontend")
+
+# ❌ Wrong — bakes in a date, breaks after every deploy
+RTS_BASE = Path("/home/hoffmann_admin/.openclaw/shared/build-20260501/frontend")
+```
+
+This is a **one-time config change**. Set it once, then the symlink swap handles every future deploy.
+
+**5c. Restart the service**
+```bash
+sudo systemctl restart hoffdesk-api
+```
+
+**5d. Create intuitive workspace symlinks (once per project)**
+```bash
+# So that ~/{project}/ is always the live path
+ln -snf ~/.openclaw/shared/current/ ~/rtsport
+```
+
+After this, any edit to `~/rtsport/frontend/templates/parent/dashboard.html` is a direct write to the live build. No indirection. No "which copy am I editing" questions.
+
+**5e. Verify deploy**
+```bash
+# Confirm `current` points to the new build
+ls -la ~/.openclaw/shared/current
+# Check the server responds with the new code
+curl -s https://hoffdesk.com/health
+```
 
 ## Recovery Protocol
 
@@ -182,6 +230,36 @@ scripts/init_collab.sh /path/to/project
 
 Creates `shared/` with template `SPEC.md` and `.gitignore`.
 
+## Filesystem Conventions
+
+Every deployed project follows a three-tier filesystem pattern:
+
+| Path | Type | Purpose | Edit? |
+|------|------|---------|-------|
+| `shared/build-{YYYYMMDD}/` | Directory | Historical snapshot / rollback point | Read-only after deploy |
+| `shared/current/` | Symlink → active build | The server's source of truth | Set via `ln -snf` during deploy |
+| `~/<project>/` | Symlink → `shared/current/` | Your editing workspace | **This is where you edit** |
+
+**Rules:**
+
+1. **`shared/current/` is the heartbeat.** Every build deploy ends with an atomic symlink swap to `shared/current/`. The previous build is preserved as a dated snapshot.
+
+2. **Server config uses `current`, never a date.** Any import, mount, or path reference in server code (e.g., `RTS_BASE`, template directories, static file mounts) points to `shared/current/`. This is set once and never changes.
+
+3. **`~/<project>/` is the intuitive path.** All human-facing workspaces are symlinks to `shared/current/`. When you edit `~/rtsport/frontend/...`, you are writing to the live build. No indirection.
+
+4. **This pattern applies ONLY to projects deployed via `shared/build-*/`.** Server code edited directly in agent workspaces (e.g., `workspace-socrates/hoffdesk-api/`) does not use the `shared/current/` symlink — those directories ARE the live paths already.
+
+**Rollback procedure:**
+
+```bash
+# If the new build is broken, point `current` back to the last known good build
+ln -snf ~/.openclaw/shared/build-{PREVIOUS_DATE}/ ~/.openclaw/shared/current
+sudo systemctl restart hoffdesk-api
+```
+
+The dated build directories are your safety net — each one is a complete, verifiable snapshot you can roll back to instantly.
+
 ## Reference Files
 
 For deeper patterns and templates:
@@ -189,12 +267,19 @@ For deeper patterns and templates:
 - `references/integration-log.md` — integration.md status format
 - `references/handoff-format.md` — Task handoff message template
 
-## When Not to Use
+## When This Pattern Applies
 
+Use the full protocol (build dir → verify → symlink deploy) when:
+- A feature requires both backend and frontend code changes
+- The project is deployed from `shared/build-*/` directories
+- The server reads templates/static files from a separate frontend path
+
+Do NOT use when:
 - Single-file changes (just do it directly)
-- Solo tasks that don't cross backend/frontend boundaries
 - Bug fixes that are purely backend or purely frontend
 - Tasks where one agent can handle both sides (use a single subagent instead)
+- Server-side code in `workspace-*/` directories (those are the live paths; no build/deploy step needed)
+- Config-only changes (feature flags, environment variables)
 
 ## Limitations
 
